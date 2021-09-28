@@ -95,6 +95,8 @@ class WebhookController extends Controller
                         'quantity' => $item['quantity'] ?? null,
                     ]);
                 }
+
+                $subscription->syncStripeStatus();
             }
         }
 
@@ -193,6 +195,9 @@ class WebhookController extends Controller
                     // Delete items that aren't attached to the subscription anymore...
                     $subscription->items()->whereNotIn('stripe_price', $prices)->delete();
                 }
+
+                $subscription->syncStripeStatus();
+
             });
         }
 

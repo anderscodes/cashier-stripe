@@ -43,41 +43,47 @@ class WebhooksTest extends FeatureTestCase
 
     public function test_subscriptions_are_created()
     {
-        $user = $this->createCustomer('subscriptions_are_created', ['stripe_id' => 'cus_foo']);
+        $user = $this->createCustomer('subscriptions_are_created');
 
-        $this->postJson('stripe/webhook', [
+        $subscription = $user->newSubscription('main', static::$priceId)
+            ->quantity(10, static::$priceId)
+            ->create('pm_card_visa');
+
+        $stripeSubscription = $subscription->asStripeSubscription();
+
+       $response = $this->postJson('stripe/webhook', [
             'id' => 'foo',
             'type' => 'customer.subscription.created',
             'data' => [
                 'object' => [
-                    'id' => 'sub_foo',
-                    'customer' => 'cus_foo',
+                    'id' => $stripeSubscription->id,
+                    'customer' => $user->stripe_id,
                     'cancel_at_period_end' => false,
                     'quantity' => 10,
                     'items' => [
                         'data' => [[
-                            'id' => 'bar',
-                            'price' => ['id' => 'price_foo', 'product' => 'prod_bar'],
+                            'id' => $stripeSubscription->items->first()->id,
+                            'price' => ['id' => static::$priceId, 'product' => $stripeSubscription->plan->product],
                             'quantity' => 10,
                         ]],
                     ],
-                    'status' => 'active',
+                    'status' => 'incomplete',
                 ],
             ],
         ])->assertOk();
 
         $this->assertDatabaseHas('subscriptions', [
-            'name' => 'default',
+            'name' => 'main',
             'user_id' => $user->id,
-            'stripe_id' => 'sub_foo',
+            'stripe_id' => $stripeSubscription->id,
             'stripe_status' => 'active',
             'quantity' => 10,
         ]);
 
         $this->assertDatabaseHas('subscription_items', [
-            'stripe_id' => 'bar',
-            'stripe_product' => 'prod_bar',
-            'stripe_price' => 'price_foo',
+            'stripe_id' => $stripeSubscription->items->first()->id,
+            'stripe_product' => $stripeSubscription->plan->product,
+            'stripe_price' => static::$priceId,
             'quantity' => 10,
         ]);
     }
@@ -100,18 +106,24 @@ class WebhooksTest extends FeatureTestCase
             'quantity' => 1,
         ]);
 
+        $subscription = $user->newSubscription('main', static::$priceId)
+            ->quantity(10, static::$priceId)
+            ->create('pm_card_visa');
+
+        $stripeSubscription = $subscription->asStripeSubscription();
+
         $this->postJson('stripe/webhook', [
             'id' => 'foo',
             'type' => 'customer.subscription.updated',
             'data' => [
                 'object' => [
-                    'id' => $subscription->stripe_id,
-                    'customer' => 'cus_foo',
+                    'id' => $stripeSubscription->id,
+                    'customer' => $user->stripe_id,
                     'cancel_at_period_end' => false,
                     'items' => [
                         'data' => [[
-                            'id' => 'bar',
-                            'price' => ['id' => 'price_foo', 'product' => 'prod_bar'],
+                            'id' => $stripeSubscription->items->first()->id,
+                            'price' => ['id' => static::$priceId, 'product' => $stripeSubscription->plan->product],
                             'quantity' => 5,
                         ]],
                     ],
@@ -122,7 +134,7 @@ class WebhooksTest extends FeatureTestCase
         $this->assertDatabaseHas('subscriptions', [
             'id' => $subscription->id,
             'user_id' => $user->id,
-            'stripe_id' => 'sub_foo',
+            'stripe_id' => $stripeSubscription->id,
             'quantity' => 5,
         ]);
 
